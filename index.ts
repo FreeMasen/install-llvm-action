@@ -155,15 +155,9 @@ const DARWIN_VERSIONS: { [key: string]: string } = {
   "15.0.7": "21.0",
 };
 
-/** Gets an LLVM download URL for the Darwin platform. */
-function getDarwinUrl(version: string, options: Options): string | null {
-  if (!options.forceVersion && DARWIN_MISSING.has(version)) {
-    return null;
-  }
-
-  const darwin = version === "9.0.0" ? "-darwin-apple" : "-apple-darwin";
-  const prefix = "clang+llvm-";
-  const suffix = `-x86_64${darwin}${DARWIN_VERSIONS[version] ?? ""}.tar.xz`;
+function buildUrl(version: string, options: Options, prefixBuilder: (options: Options) => string, suffixBuilder: (options: Options) => string): string | null {
+  let prefix = prefixBuilder(options);
+  let suffix = suffixBuilder(options);
   if (options.downloadUrl) {
     return getDownloadUrl(options.downloadUrl, version, prefix, suffix);
   } else if (compareVersions(version, "9.0.1") >= 0) {
@@ -171,6 +165,22 @@ function getDarwinUrl(version: string, options: Options): string | null {
   } else {
     return getReleaseUrl(version, prefix, suffix);
   }
+}
+
+/** Gets an LLVM download URL for the Darwin platform. */
+function getDarwinUrl(version: string, options: Options): string | null {
+  if (!options.forceVersion && DARWIN_MISSING.has(version)) {
+    return null;
+  }
+  let prefixBuilder = (options: Options) => {
+    return "clang+llvm-";
+  };
+  let suffixBuilder = (options: Options) => {
+    const darwin = version === "9.0.0" ? "-darwin-apple" : "-apple-darwin";
+    return `-x86_64${darwin}${DARWIN_VERSIONS[version] ?? ""}.tar.xz`;
+  }
+  return buildUrl(version, options, prefixBuilder, suffixBuilder);
+  
 }
 
 /** The LLVM versions that were never released for the Linux platform. */
@@ -258,26 +268,28 @@ function getLinuxUrl(version: string, options: Options): string | null {
     version = rc;
   }
 
-  let ubuntu;
+  
+  let ubuntu: string | null;
   if (options.ubuntuVersion) {
     ubuntu = `-ubuntu-${options.ubuntuVersion}`;
   } else if (options.forceVersion) {
+    // fallback to -ubuntu-22.04
     ubuntu = UBUNTU[MAX_UBUNTU];
   } else {
     ubuntu = UBUNTU[version];
   }
-
   if (!ubuntu) {
     return null;
   }
-
-  const prefix = "clang+llvm-";
-  const suffix = `-x86_64-linux-gnu${ubuntu}.tar.xz`;
-  if (compareVersions(version, "9.0.1") >= 0) {
-    return getGitHubUrl(version, prefix, suffix);
-  } else {
-    return getReleaseUrl(version, prefix, suffix);
+  
+  let prefixBuilder = () => {
+    return "clang+llvm-";
+    
   }
+  let suffixBuilder = () => {
+    return `-x86_64-linux-gnu${ubuntu}.tar.xz`;
+  }
+  return buildUrl(version, options, prefixBuilder, suffixBuilder);
 }
 
 /** The LLVM versions that were never released for the Windows platform. */
@@ -290,14 +302,14 @@ function getWin32Url(version: string, options: Options): string | null {
   if (!options.forceVersion && WIN32_MISSING.has(version)) {
     return null;
   }
+  let prefixBuilder = () => {
+    return "LLVM-";
 
-  const prefix = "LLVM-";
-  const suffix = compareVersions(version, "3.7.0") >= 0 ? "-win64.exe" : "-win32.exe";
-  if (compareVersions(version, "9.0.1") >= 0) {
-    return getGitHubUrl(version, prefix, suffix);
-  } else {
-    return getReleaseUrl(version, prefix, suffix);
   }
+  let suffixBuilder = () => {
+    return compareVersions(version, "3.7.0") >= 0 ? "-win64.exe" : "-win32.exe";
+  }
+  return buildUrl(version, options, prefixBuilder, suffixBuilder);
 }
 
 /** Gets an LLVM download URL. */
